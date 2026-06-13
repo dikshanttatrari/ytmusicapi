@@ -1,5 +1,6 @@
 import os
 import json
+import tempfile
 from functools import lru_cache
 from fastapi import FastAPI, Query, Header, Response
 from fastapi.responses import StreamingResponse
@@ -25,11 +26,38 @@ def get_stream_url_from_yt(video_id: str):
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,
+        'extractor_args': {
+            'youtube': {'player_client': ['android', 'web']}
+        }
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        return info.get('url')
 
+    # 1. Check for cookies in the environment variables
+    cookie_data = os.environ.get("YOUTUBE_COOKIES")
+    temp_cookie_file = None
+
+    if cookie_data:
+        # 2. Create a secure temporary file
+        temp_cookie_file = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt')
+        
+        # 3. Clean and write the cookie data
+        clean_cookie_data = cookie_data.replace('\\n', '\n') 
+        temp_cookie_file.write(clean_cookie_data)
+        temp_cookie_file.flush() # Force write to disk immediately
+        
+        # 4. Point yt-dlp to this temporary file
+        ydl_opts['cookiefile'] = temp_cookie_file.name
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            return info.get('url')
+            
+    finally:
+        # 5. SECURITY: Always delete the temporary file immediately after extracting the URL
+        if temp_cookie_file:
+            temp_cookie_file.close()
+            if os.path.exists(temp_cookie_file.name):
+                os.remove(temp_cookie_file.name)
 
 @app.get("/api/search")
 def search_all(q: str = Query(...)):
@@ -41,7 +69,6 @@ def search_all(q: str = Query(...)):
         mapped_results = []
 
         for item in artists_results:
-
             artist_id = item.get('browseId') 
             if not artist_id: continue
             
@@ -151,12 +178,11 @@ def search_songs(q: str = Query(...)):
             "results": mapped_results
         }
     }
+
 @app.get("/api/home")
 def get_home_data():
     try:
-
         home_data = yt.get_home(limit=5)
-        
         formatted_modules = []
         
         for shelf in home_data:
@@ -165,12 +191,10 @@ def get_home_data():
             
             mapped_contents = []
             for item in contents:
-
                 item_id = item.get('videoId') or item.get('playlistId') or item.get('browseId')
 
                 if not item_id:
                     continue
-                    
 
                 if item.get('videoId'):
                     item_type = "song"
@@ -193,7 +217,6 @@ def get_home_data():
                     "image": image_url
                 })
             
-     
             if mapped_contents:
                 formatted_modules.append({
                     "title": title,
@@ -282,10 +305,8 @@ def get_artist_songs(artist_id: str):
                 image_url = image_url.split('=')[0] + "=w500-h500-l90-rj"
             artists_list = item.get('artists', [])
             if artists_list:
-
                 all_singers = ", ".join([a.get('name') for a in artists_list if a.get('name')])
             else:
-         
                 all_singers = artist_data.get('name', 'Unknown Artist')
 
             plays_raw = item.get('views') or item.get('plays') or item.get('playCount') or ""
@@ -318,7 +339,6 @@ def get_artist_songs(artist_id: str):
 @app.get("/api/stream/{video_id}")
 def get_audio_stream(video_id: str, range: str = Header(None)):
     try:
-
         direct_playback_url = get_stream_url_from_yt(video_id)
         print(f"Direct Playback URL for {video_id}: {direct_playback_url}")
             
@@ -347,7 +367,6 @@ def get_audio_stream(video_id: str, range: str = Header(None)):
         )
         
     except Exception as e:
-
         get_stream_url_from_yt.cache_clear()
         print(f"Streaming Error: {e}")
         return {"success": False, "error": str(e)}
@@ -363,4 +382,3 @@ def get_suggestions(q: str = Query(...)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    
