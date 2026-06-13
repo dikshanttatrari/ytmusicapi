@@ -23,25 +23,27 @@ app.add_middleware(
 def get_stream_url_from_yt(video_id: str):
     ydl_opts = {
         'format': 'bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
+        # 1. TURN OFF QUIET MODE: We need to see YouTube's actual error message in the Render logs
+        'quiet': False,
+        'no_warnings': False,
         'skip_download': True,
-
+        # 2. THE MOBILE FALLBACK: Use mobile clients which are less strictly blocked
+        'extractor_args': {
+            'youtube': {'player_client': ['android', 'mweb', 'web']}
+        }
     }
 
     cookie_data = os.environ.get("YOUTUBE_COOKIES")
     temp_cookie_file = None
 
     if cookie_data:
-        # 2. Create a secure temporary file
         temp_cookie_file = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt')
         
-        # 3. Clean and write the cookie data
-        clean_cookie_data = cookie_data.replace('\\n', '\n') 
+        # 3. THE FORMATTING FIX: Ensure Windows/Mac line endings don't corrupt the Netscape cookie format
+        clean_cookie_data = cookie_data.replace('\\n', '\n').replace('\r\n', '\n') 
         temp_cookie_file.write(clean_cookie_data)
-        temp_cookie_file.flush() # Force write to disk immediately
+        temp_cookie_file.flush() 
         
-        # 4. Point yt-dlp to this temporary file
         ydl_opts['cookiefile'] = temp_cookie_file.name
 
     try:
@@ -50,7 +52,6 @@ def get_stream_url_from_yt(video_id: str):
             return info.get('url')
             
     finally:
-        # 5. SECURITY: Always delete the temporary file immediately after extracting the URL
         if temp_cookie_file:
             temp_cookie_file.close()
             if os.path.exists(temp_cookie_file.name):
