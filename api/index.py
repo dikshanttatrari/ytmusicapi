@@ -21,12 +21,13 @@ app.add_middleware(
 
 @lru_cache(maxsize=100) 
 def get_stream_url_from_yt(video_id: str):
-    ydl_opts = {
+   ydl_opts = {
         'format': '251/140/bestaudio/best',
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,
         'extractor_args': {
+
             'youtube': {'player_client': ['ios', 'android', 'web']}
         }
     }
