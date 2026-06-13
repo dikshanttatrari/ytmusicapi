@@ -23,13 +23,11 @@ app.add_middleware(
 def get_stream_url_from_yt(video_id: str):
     ydl_opts = {
         'format': 'bestaudio/best',
-        # 1. TURN OFF QUIET MODE: We need to see YouTube's actual error message in the Render logs
         'quiet': False,
         'no_warnings': False,
         'skip_download': True,
-        # 2. THE MOBILE FALLBACK: Use mobile clients which are less strictly blocked
         'extractor_args': {
-            'youtube': {'player_client': ['android', 'mweb', 'web']}
+            'youtube': {'player_client': ['tv', 'ios']} 
         }
     }
 
